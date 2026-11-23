@@ -1,6 +1,7 @@
 import os
 import json
 import datetime
+import re
 import sqlalchemy.types
 from sqlalchemy import Column, Text, Boolean, BigInteger as Integer, create_engine, Table, ForeignKey
 from sqlalchemy.orm import relationship, sessionmaker, foreign, declarative_base
@@ -25,7 +26,19 @@ class JSON(TypeDecorator):
 class DateTime(TypeDecorator):
     impl = sqlalchemy.types.DateTime
     def process_bind_param(self, value, dialect):
-        if value is not None and isinstance(value, str):
+        if value is not None and isinstance(value, str) and value:
+            # Graph commonly returns seven fractional digits, which the
+            # strptime fallbacks below cannot parse.
+            if re.search(r'\.\d{7,}(?:Z|[+-]\d{2}:\d{2})?$', value):
+                try:
+                    parsed = datetime.datetime.fromisoformat(
+                        value[:-1] + '+00:00' if value.endswith('Z') else value)
+                    if parsed.tzinfo is not None:
+                        parsed = parsed.astimezone(
+                            datetime.timezone.utc).replace(tzinfo=None)
+                    return parsed
+                except ValueError:
+                    pass
             # Sometimes it ends on a Z, sometimes it doesn't
             if value[-1] == 'Z':
                 if '.' in value:
@@ -1776,6 +1789,44 @@ class AZresource(Base, SerializeMixin):
     subscription_id = Column(Text, ForeignKey("AZsubscriptions.id"))
     tags = Column(JSON)
     extended_location = Column(JSON)
+
+
+class CollectorState(Base, SerializeMixin):
+    """
+    Per-tenant delta cursor for the incremental role/application collector.
+
+    This table is additive. Existing ROADrecon databases keep their original
+    schema and only get this table created on the next collector run.
+    """
+    __tablename__ = 'CollectorStates'
+    tenantId = Column(Text, primary_key=True)
+    resource = Column(Text, primary_key=True)
+    deltaLink = Column(Text)
+    lastRun = Column(DateTime)
+    lastSuccessfulRun = Column(DateTime)
+    fullSyncCompleted = Column(Boolean)
+    itemCount = Column(Integer)
+
+
+class CollectorObject(Base, SerializeMixin):
+    """
+    Tenant/resource to object mapping used by the collector.
+
+    The mapping allows safe pruning and multi-tenant operations without
+    changing the primary keys of the existing ROADrecon tables.
+    """
+    __tablename__ = 'CollectorObjects'
+    tenantId = Column(Text, primary_key=True)
+    resource = Column(Text, primary_key=True)
+    objectId = Column(Text, primary_key=True)
+    lastSeen = Column(DateTime)
+    deleted = Column(Boolean)
+
+
+# Backwards/forwards friendly aliases for callers that prefer the singular
+# "Collection" naming.
+CollectionState = CollectorState
+CollectionObject = CollectorObject
 
 
 def parse_db_argument(dbarg):

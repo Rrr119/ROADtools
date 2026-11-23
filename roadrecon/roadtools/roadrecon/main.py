@@ -4,6 +4,7 @@ import os
 import importlib
 from roadtools.roadlib.auth import Authentication
 from roadtools.roadrecon.gather import getargs as getgatherargs
+from roadtools.roadrecon.rolegather import getargs as getrolegatherargs
 RR_HELP = '''ROADrecon - The Azure AD exploration tool.
 By @_dirkjan - dirkjanm.io
 
@@ -15,7 +16,10 @@ roadrecon auth <options>
 2. Gather all information
 roadrecon gather <options>
 
-3. Explore the data or export it to a specific format using a plugin
+3. Incrementally gather roles and applications via Microsoft Graph
+roadrecon rolegather <options>
+
+4. Explore the data or export it to a specific format using a plugin
 roadrecon gui
 roadrecon plugin -h
 '''
@@ -60,6 +64,14 @@ def main():
 
     azgather_parser = subparsers.add_parser('azgather', aliases=['azdump'], help='Gather Azure RM access and resources')
     getgatherargs(azgather_parser)
+
+    rolegather_parser = subparsers.add_parser(
+        'rolegather',
+        aliases=['roledump', 'roleappgather', 'roleappdump', 'appgather', 'appdump',
+                 'collectroleapps', 'collectrolesapps', 'rolesapps',
+                 'gatherroleapps', 'collect', 'collector'],
+        help='Incrementally gather Entra ID roles and applications')
+    getrolegatherargs(rolegather_parser)
 
     gatherall_parser = subparsers.add_parser('gatherall', aliases=['dumpall'], help='Gather data via all available APIs')
     getgatherargs(gatherall_parser)
@@ -146,6 +158,12 @@ def main():
     elif args.command == 'azgather' or args.command == 'azdump':
         from roadtools.roadrecon.azgather import main as azgathermain
         azgathermain(args)
+    elif args.command in ('rolegather', 'roledump', 'roleappgather', 'roleappdump',
+                          'appgather', 'appdump', 'collectroleapps',
+                          'collectrolesapps', 'rolesapps', 'gatherroleapps',
+                          'collect', 'collector'):
+        from roadtools.roadrecon.rolegather import main as rolegathermain
+        rolegathermain(args)
     elif args.command == 'pimgather' or args.command == 'pimdump':
         from roadtools.roadrecon.pimgather import main as pimgathermain
         pimgathermain(args)

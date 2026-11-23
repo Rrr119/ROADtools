@@ -56,6 +56,36 @@ You can run the Angular frontend with `npm start` or `ng serve` using the Angula
 ### Using ROADrecon
 See [this Wiki page](https://github.com/dirkjanm/ROADtools/wiki/Getting-started-with-ROADrecon) on how to get started.
 
+### Incremental role and application collection
+
+`roadrecon rolegather` collects Entra ID directory roles, applications,
+service principals and OAuth2 permission grants through Microsoft Graph. It
+writes to the same tables as `roadrecon gather`, so existing databases and the
+GUI keep working. Only two additive bookkeeping tables are created:
+`CollectorStates` (per-tenant delta cursor) and `CollectorObjects`
+(tenant/resource/object ledger).
+
+```
+roadrecon auth -r msgraph
+roadrecon rolegather -d roadrecon.db
+roadrecon rolegather -d roadrecon.db --all
+roadrecon rolegather -d roadrecon.db --full
+```
+
+The first run performs a full snapshot and saves the Graph `@odata.deltaLink`.
+Later runs use that link and apply only additions, updates and removals. State
+is keyed by tenant, so multiple tenants can share one database without
+overwriting or pruning each other's objects. `--all` additionally refreshes
+role definitions, directory role assignments and application role assignments.
+`--resource` can be repeated to collect a specific subset.
+Removed objects are marked through the existing `deletionTimestamp` columns
+where the table provides one; a later delta that restores the object clears
+the marker.
+
+Required Microsoft Graph permissions include `Directory.Read.All`. Role
+definition/assignment collection may additionally require
+`RoleManagement.Read.Directory`.
+
 ## ROADtools Token eXchange (roadtx)
 ![PyPI version](https://img.shields.io/pypi/v/roadtx.svg)
 [![Build Status](https://dev.azure.com/dirkjanm/ROADtools/_apis/build/status/dirkjanm.ROADtools?branchName=master)](https://dev.azure.com/dirkjanm/ROADtools/_build/latest?definitionId=19&branchName=master)
